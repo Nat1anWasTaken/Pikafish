@@ -35,77 +35,10 @@ jobs:
           wget -O pikafish.nnue https://github.com/official-pikafish/Networks/releases/download/master-net/pikafish.nnue
           ls -lh pikafish.nnue
 
-      - name: Create WASM wrapper
+      - name: Verify WASM wrapper exists
         run: |
-          cat > src/wasm_api.cpp << 'EOF'
-          #include <emscripten/bind.h>
-          #include <emscripten/val.h>
-          #include <string>
-          #include <sstream>
-          #include "engine.h"
-          #include "uci.h"
-          #include "position.h"
-          #include "search.h"
-
-          using namespace emscripten;
-          using namespace Stockfish;
-
-          class PikafishWASM {
-          private:
-              Engine engine;
-              std::string currentFen;
-
-          public:
-              PikafishWASM() : engine(nullptr) {}
-
-              void init() {
-                  // Initialize engine with default options
-                  engine.set_on_update_full([](const auto& info) {
-                      // This will be overridden by JavaScript
-                  });
-              }
-
-              void setPosition(const std::string& fen) {
-                  currentFen = fen;
-                  std::stringstream ss;
-                  ss << "position fen " << fen;
-                  engine.execute(ss.str());
-              }
-
-              std::string go(int depth) {
-                  std::stringstream ss;
-                  ss << "go depth " << depth;
-                  std::string bestmove;
-
-                  engine.set_on_bestmove([&bestmove](const auto& bm, const auto& ponder) {
-                      std::stringstream result;
-                      result << UCI::move(bm.best);
-                      bestmove = result.str();
-                  });
-
-                  engine.execute(ss.str());
-                  return bestmove;
-              }
-
-              void stop() {
-                  engine.execute("stop");
-              }
-
-              std::string getVersion() {
-                  return engine.info();
-              }
-          };
-
-          EMSCRIPTEN_BINDINGS(pikafish_module) {
-              class_<PikafishWASM>("PikafishWASM")
-                  .constructor<>()
-                  .function("init", &PikafishWASM::init)
-                  .function("setPosition", &PikafishWASM::setPosition)
-                  .function("go", &PikafishWASM::go)
-                  .function("stop", &PikafishWASM::stop)
-                  .function("getVersion", &PikafishWASM::getVersion);
-          }
-          EOF
+          ls -lh src/wasm_api.cpp
+          echo "WASM API wrapper is ready"
 
       - name: Build WASM (SIMD version)
         run: |
@@ -281,74 +214,6 @@ jobs:
           }
           EOF
 
-      - name: Create example HTML
-        run: |
-          cat > example.html << 'EOF'
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <title>Pikafish WASM Example</title>
-            <meta charset="utf-8">
-            <style>
-              body { font-family: Arial, sans-serif; margin: 20px; }
-              button { margin: 10px 0; padding: 10px; }
-              #output { border: 1px solid #ccc; padding: 10px; margin-top: 10px; min-height: 100px; }
-            </style>
-          </head>
-          <body>
-            <h1>Pikafish WebAssembly Demo</h1>
-            <p>Starting position FEN:</p>
-            <input type="text" id="fen" value="rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1" style="width: 500px;">
-            <br>
-            <label>Depth: <input type="number" id="depth" value="15" min="1" max="30"></label>
-            <br>
-            <button onclick="analyze()">Analyze Position</button>
-            <button onclick="stop()">Stop</button>
-            <div id="output">Loading engine...</div>
-
-            <script type="module">
-              import { PikafishEngine } from './pikafish-wrapper.js';
-
-              let engine;
-
-              async function initEngine() {
-                try {
-                  engine = new PikafishEngine();
-                  const version = await engine.init('./src/pikafish-simd.js');
-                  document.getElementById('output').textContent = 'Engine ready: ' + version;
-                  window.engine = engine;
-                } catch (error) {
-                  document.getElementById('output').textContent = 'Error: ' + error.message;
-                }
-              }
-
-              window.analyze = async function() {
-                if (!engine) return;
-                const fen = document.getElementById('fen').value;
-                const depth = parseInt(document.getElementById('depth').value);
-                document.getElementById('output').textContent = 'Analyzing...';
-
-                try {
-                  const bestMove = await engine.analyze(fen, depth);
-                  document.getElementById('output').textContent = 'Best move: ' + bestMove;
-                } catch (error) {
-                  document.getElementById('output').textContent = 'Error: ' + error.message;
-                }
-              };
-
-              window.stop = function() {
-                if (engine) {
-                  engine.stop();
-                  document.getElementById('output').textContent = 'Search stopped';
-                }
-              };
-
-              initEngine();
-            </script>
-          </body>
-          </html>
-          EOF
-
       - name: Create README for WASM distribution
         run: |
           cat > WASM-README.md << 'EOF'
@@ -362,7 +227,6 @@ jobs:
           - `pikafish-basic.js` / `pikafish-basic.wasm` - Basic version (wider compatibility)
           - `pikafish-wrapper.js` - High-level JavaScript API wrapper
           - `pikafish-wrapper.d.ts` - TypeScript type definitions
-          - `example.html` - Working example/demo
 
           ## Quick Start
 
@@ -404,7 +268,7 @@ jobs:
           mkdir -p wasm-dist
           cp src/pikafish-simd.js src/pikafish-simd.wasm wasm-dist/ 2>/dev/null || true
           cp src/pikafish-basic.js src/pikafish-basic.wasm wasm-dist/ 2>/dev/null || true
-          cp pikafish-wrapper.js pikafish-wrapper.d.ts example.html WASM-README.md wasm-dist/
+          cp pikafish-wrapper.js pikafish-wrapper.d.ts WASM-README.md wasm-dist/
           cd wasm-dist
           ls -lh
 
@@ -425,5 +289,4 @@ jobs:
             wasm-dist/pikafish-basic.wasm
             wasm-dist/pikafish-wrapper.js
             wasm-dist/pikafish-wrapper.d.ts
-            wasm-dist/example.html
             wasm-dist/WASM-README.md

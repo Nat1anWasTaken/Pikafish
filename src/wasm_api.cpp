@@ -16,7 +16,6 @@
 #include "engine.h"
 #include "search.h"
 #include "types.h"
-#include "uci.h"
 
 using namespace emscripten;
 using namespace Stockfish;
