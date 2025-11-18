@@ -16,6 +16,7 @@
 #include "engine.h"
 #include "search.h"
 #include "types.h"
+#include "ucioption.h"
 
 using namespace emscripten;
 using namespace Stockfish;
@@ -166,10 +167,11 @@ public:
 
     // Set option value
     void setOption(const std::string& name, const std::string& value) {
-        auto& options = engine->get_options();
-        if (options.count(name)) {
-            options[name] = value;
-        }
+        engine->wait_for_search_finished();
+        std::stringstream ss;
+        ss << "name " << name << " value " << value;
+        std::istringstream is(ss.str());
+        engine->get_options().setoption(is);
     }
 
     // Get hash usage percentage
